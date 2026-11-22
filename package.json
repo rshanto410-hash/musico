@@ -1,0 +1,19 @@
+{
+  "name": "musico",
+  "version": "0.1.0",
+  "description": "MUSICO - YOUR MUSIC. YOUR SERVER. YOUR VIBE.",
+  "main": "src/index.js",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "deploy": "node src/deploy-commands.js",
+    "check": "node --check src/index.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.21.0",
+    "dotenv": "^16.4.5"
+  }
+}
