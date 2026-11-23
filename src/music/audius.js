@@ -37,6 +37,7 @@ async function searchAudius(query, fetchImpl = fetch, limit = 5) {
     const artist = normalize(t.user?.name);
     if (title === q) return 4; // exact song name
     if (title.startsWith(q)) return 3;
+    if ((title + ' ' + artist).startsWith(q)) return 3; // "song artist"
     if (title.includes(q)) return 2;
     if ((title + ' ' + artist).includes(q)) return 1;
     return 0;
@@ -47,8 +48,9 @@ async function searchAudius(query, fetchImpl = fetch, limit = 5) {
     .map((t, index) => ({ t, index, s: score(t) }))
     .sort((a, b) => b.s - a.s || a.index - b.index) // best name match first, Audius order breaks ties
     .slice(0, limit)
-    .map(({ t }) => t)
+    .map((x) => ({ ...x.t, _match: x.s }))
     .map((t) => ({
+      match: t._match, // 3-4 = the song name matches what was asked, below = only similar
       title: String(t.title || 'Unknown title').slice(0, 100),
       author: String(t.user?.name || 'Unknown artist').slice(0, 80),
       url: `${API_HOST}/v1/tracks/${encodeURIComponent(t.id)}/stream?app_name=${APP_NAME}`,

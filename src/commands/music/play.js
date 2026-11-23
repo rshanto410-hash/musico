@@ -78,6 +78,22 @@ module.exports = {
       if (candidates.length === 0 && audiusFailed) {
         return interaction.editReply({ embeds: [embeds.error('The music search is not reachable right now. Please try again.')] });
       }
+      // Accuracy first: only play a song whose name matches what was typed.
+      const exact = candidates.filter((c) => c.match === undefined || c.match >= 3);
+      if (exact.length === 0 && candidates.length > 0) {
+        const closest = candidates
+          .slice(0, 3)
+          .map((c) => `• ${c.title} — ${c.author}`)
+          .join('\n');
+        return interaction.editReply({
+          embeds: [
+            embeds.error(
+              `I could not find a song named exactly **${input.slice(0, 60)}** in the free music library, so I did not play anything else.\n\nClosest matches:\n${closest}\n\nTo play one of these, type its full name (and artist). Or use a direct audio link.`
+            ),
+          ],
+        });
+      }
+      candidates = exact;
       if (candidates.length === 0) {
         return interaction.editReply({
           embeds: [embeds.error(`No free songs found for **${input.slice(0, 60)}**. Try another name or a simpler search.`)],
