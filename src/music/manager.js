@@ -73,6 +73,14 @@ class MusicManager {
     return player;
   }
 
+  /** Join a voice channel and wait there for songs. Leaves after a while if nothing is played. */
+  async join({ guild, voiceChannel, textChannel }) {
+    const queue = this._getOrCreateQueue(guild.id);
+    queue.textChannel = textChannel;
+    await this._ensurePlayer(guild, voiceChannel);
+    if (!queue.isActive) this._scheduleIdle(queue);
+  }
+
   /**
    * Add songs to the queue. Starts playing right away if nothing is playing.
    * @param {{guild: object, voiceChannel: object, textChannel: object}} context
