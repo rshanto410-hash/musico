@@ -6,6 +6,7 @@ const embeds = require('../../utils/embeds');
 const logger = require('../../utils/logger');
 const { preparePlayback } = require('../../music/guards');
 const { searchJamendo } = require('../../music/jamendo');
+const { searchAudius } = require('../../music/audius');
 const { isSafeStreamUrl } = require('../../music/radio');
 
 function isUrl(text) {
@@ -30,7 +31,7 @@ module.exports = {
   aliases: ['p'],
   data: new SlashCommandBuilder()
     .setName('play')
-    .setDescription('Play a song by name (free Jamendo music) or from a direct audio link.')
+    .setDescription('Play a song by name (free music from Audius) or from a direct audio link.')
     .setDMPermission(false)
     .addStringOption((option) =>
       option
@@ -57,24 +58,29 @@ module.exports = {
       }
       candidates = [itemFromUrl(input)];
     } else {
+      candidates = [];
+      let audiusFailed = false;
       try {
-        candidates = await searchJamendo(input, config.jamendoClientId);
+        candidates = await searchAudius(input);
       } catch (err) {
-        if (err.message === 'JAMENDO_NOT_CONFIGURED') {
-          return interaction.editReply({
-            embeds: [
-              embeds.error(
-                'Searching by song name is not set up yet (the bot owner needs a free Jamendo Client ID). You can still use a direct audio link or `/radio`.'
-              ),
-            ],
-          });
+        audiusFailed = true;
+        logger.error('Audius search failed:', err);
+      }
+      // Jamendo is optional. If its key is missing or rejected we just skip it.
+      if (candidates.length === 0 && config.jamendoClientId) {
+        try {
+          candidates = await searchJamendo(input, config.jamendoClientId);
+          audiusFailed = false;
+        } catch (err) {
+          logger.warn(`Jamendo search skipped: ${err.message}`);
         }
-        logger.error('Jamendo search failed:', err);
+      }
+      if (candidates.length === 0 && audiusFailed) {
         return interaction.editReply({ embeds: [embeds.error('The music search is not reachable right now. Please try again.')] });
       }
       if (candidates.length === 0) {
         return interaction.editReply({
-          embeds: [embeds.error(`No free songs found for **${input.slice(0, 60)}**. Try another name, or an artist from Jamendo.`)],
+          embeds: [embeds.error(`No free songs found for **${input.slice(0, 60)}**. Try another name or a simpler search.`)],
         });
       }
     }
