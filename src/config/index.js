@@ -20,6 +20,11 @@ module.exports = Object.freeze({
   port: Number.parseInt(process.env.PORT, 10) || 3000,
   logLevel: (process.env.LOG_LEVEL || 'info').toLowerCase(),
 
+  lavalink: Object.freeze({
+    url: (process.env.LAVALINK_URL || '127.0.0.1:2333').trim(),
+    password: (process.env.LAVALINK_PASSWORD || 'youshallnotpass').trim(),
+  }),
+
   brand: Object.freeze({
     name: 'MUSICO',
     tagline: 'YOUR MUSIC. YOUR SERVER. YOUR VIBE.',

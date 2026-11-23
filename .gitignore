@@ -7,3 +7,8 @@ data/
 *.sqlite
 *.sqlite3
 .DS_Store
+
+# Lavalink (downloaded by "npm run get-lavalink", not stored in git)
+lavalink/Lavalink.jar
+lavalink/logs/
+lavalink/plugins/

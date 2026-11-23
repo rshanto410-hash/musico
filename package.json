@@ -10,10 +10,13 @@
   "scripts": {
     "start": "node src/index.js",
     "deploy": "node src/deploy-commands.js",
+    "get-lavalink": "bash scripts/get-lavalink.sh",
+    "lavalink": "cd lavalink && java -Xmx512m -jar Lavalink.jar",
     "check": "node --check src/index.js"
   },
   "dependencies": {
     "discord.js": "^14.21.0",
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "shoukaku": "^4.1.1"
   }
 }

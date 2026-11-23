@@ -6,10 +6,14 @@ const { Client, GatewayIntentBits } = require('discord.js');
 const config = require('./config');
 const logger = require('./utils/logger');
 const { loadCommands, loadEvents } = require('./utils/loader');
+const { createShoukaku } = require('./music/lavalink');
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
 });
+
+// Audio connection (Lavalink). Commands reach it through client.shoukaku.
+client.shoukaku = createShoukaku(client);
 
 client.commands = loadCommands(path.join(__dirname, 'commands'), logger);
 const eventCount = loadEvents(path.join(__dirname, 'events'), client, logger);
