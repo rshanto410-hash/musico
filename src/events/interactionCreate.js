@@ -3,10 +3,31 @@
 const { Events, MessageFlags } = require('discord.js');
 const logger = require('../utils/logger');
 const embeds = require('../utils/embeds');
+const { handleButton, PREFIX } = require('../music/buttons');
 
 module.exports = {
   name: Events.InteractionCreate,
   async execute(client, interaction) {
+    // Player panel buttons (pause, skip, stop, ...)
+    if (interaction.isButton() && interaction.customId.startsWith(PREFIX)) {
+      try {
+        await handleButton(interaction, client);
+      } catch (err) {
+        logger.error('Error in player button:', err);
+        const payload = {
+          embeds: [embeds.error('That button did not work. Please try again.')],
+          flags: MessageFlags.Ephemeral,
+        };
+        try {
+          if (interaction.replied || interaction.deferred) await interaction.followUp(payload);
+          else await interaction.reply(payload);
+        } catch (replyErr) {
+          logger.error('Could not send button error message:', replyErr);
+        }
+      }
+      return;
+    }
+
     if (!interaction.isChatInputCommand()) return;
 
     const command = client.commands.get(interaction.commandName);

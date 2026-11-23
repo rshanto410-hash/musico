@@ -7,6 +7,8 @@ const config = require('./config');
 const logger = require('./utils/logger');
 const { loadCommands, loadEvents } = require('./utils/loader');
 const { createShoukaku } = require('./music/lavalink');
+const { MusicManager } = require('./music/manager');
+const panel = require('./music/panel');
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
@@ -14,6 +16,8 @@ const client = new Client({
 
 // Audio connection (Lavalink). Commands reach it through client.shoukaku.
 client.shoukaku = createShoukaku(client);
+// Queue + playback controls for every server. Commands and buttons use client.music.
+client.music = new MusicManager(client, panel);
 
 client.commands = loadCommands(path.join(__dirname, 'commands'), logger);
 const eventCount = loadEvents(path.join(__dirname, 'events'), client, logger);

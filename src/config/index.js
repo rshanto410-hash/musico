@@ -20,6 +20,9 @@ module.exports = Object.freeze({
   port: Number.parseInt(process.env.PORT, 10) || 3000,
   logLevel: (process.env.LOG_LEVEL || 'info').toLowerCase(),
 
+  // Free key from https://devportal.jamendo.com (needed for searching songs by name)
+  jamendoClientId: (process.env.JAMENDO_CLIENT_ID || '').trim(),
+
   lavalink: Object.freeze({
     url: (process.env.LAVALINK_URL || '127.0.0.1:2333').trim(),
     password: (process.env.LAVALINK_PASSWORD || 'youshallnotpass').trim(),
