@@ -6,6 +6,7 @@ const logger = require('../../utils/logger');
 const { preparePlayback, replyError } = require('../../music/guards');
 
 module.exports = {
+  aliases: ['j'],
   data: new SlashCommandBuilder().setName('join').setDescription('Make MUSICO join your voice channel.').setDMPermission(false),
 
   async execute(interaction, client) {

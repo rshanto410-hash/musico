@@ -27,6 +27,7 @@ function itemFromUrl(text) {
 }
 
 module.exports = {
+  aliases: ['p'],
   data: new SlashCommandBuilder()
     .setName('play')
     .setDescription('Play a song by name (free Jamendo music) or from a direct audio link.')

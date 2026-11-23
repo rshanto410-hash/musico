@@ -5,6 +5,7 @@ const embeds = require('../../utils/embeds');
 const { replyError } = require('../../music/guards');
 
 module.exports = {
+  aliases: ['l'],
   data: new SlashCommandBuilder()
     .setName('leave')
     .setDescription('Make MUSICO leave the voice channel (also clears the queue).')

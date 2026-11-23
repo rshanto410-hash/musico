@@ -5,6 +5,7 @@ const embeds = require('../../utils/embeds');
 const { checkVoice, replyError } = require('../../music/guards');
 
 module.exports = {
+  aliases: ['s'],
   data: new SlashCommandBuilder().setName('skip').setDescription('Skip to the next song.').setDMPermission(false),
 
   async execute(interaction, client) {

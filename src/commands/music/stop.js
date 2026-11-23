@@ -5,6 +5,7 @@ const embeds = require('../../utils/embeds');
 const { checkVoice, replyError } = require('../../music/guards');
 
 module.exports = {
+  aliases: ['x'],
   data: new SlashCommandBuilder()
     .setName('stop')
     .setDescription('Stop the music, clear the queue and leave the voice channel.')

@@ -5,6 +5,7 @@ const embeds = require('../../utils/embeds');
 const { formatDuration } = require('../../music/panel');
 
 module.exports = {
+  aliases: ['q'],
   data: new SlashCommandBuilder().setName('queue').setDescription('Show what is playing and what is coming up.').setDMPermission(false),
 
   async execute(interaction, client) {

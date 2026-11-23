@@ -23,6 +23,25 @@ function loadCommands(dir, logger) {
       continue;
     }
     commands.set(command.data.name, command);
+
+    // Short names, e.g. aliases: ['p'] makes /p work exactly like /play.
+    for (const alias of command.aliases || []) {
+      if (!/^[a-z0-9_-]{1,32}$/.test(alias)) {
+        logger.warn(`Skipping alias "${alias}" of /${command.data.name}: Discord names must be lowercase.`);
+        continue;
+      }
+      if (commands.has(alias)) {
+        logger.warn(`Skipping alias "${alias}": a command with that name already exists.`);
+        continue;
+      }
+      commands.set(alias, {
+        ...command,
+        data: {
+          name: alias,
+          toJSON: () => ({ ...command.data.toJSON(), name: alias }),
+        },
+      });
+    }
   }
   return commands;
 }
