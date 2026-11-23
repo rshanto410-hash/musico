@@ -4,10 +4,18 @@ const { Events, MessageFlags } = require('discord.js');
 const logger = require('../utils/logger');
 const embeds = require('../utils/embeds');
 const { handleButton, PREFIX } = require('../music/buttons');
+const { handleSelection } = require('../music/searchSelection');
 
 module.exports = {
   name: Events.InteractionCreate,
   async execute(client, interaction) {
+    // User-confirmed track selection from /play search results.
+    if (interaction.isStringSelectMenu() && interaction.customId.startsWith('musico:search:')) {
+      try { await handleSelection(interaction, client); }
+      catch (err) { logger.error('Track selection failed:', err); if (interaction.deferred || interaction.replied) await interaction.followUp({ content: 'Could not select that track. Please run /play again.', flags: MessageFlags.Ephemeral }); else await interaction.reply({ content: 'Could not select that track. Please run /play again.', flags: MessageFlags.Ephemeral }); }
+      return;
+    }
+
     // Player panel buttons (pause, skip, stop, ...)
     if (interaction.isButton() && interaction.customId.startsWith(PREFIX)) {
       try {

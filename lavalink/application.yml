@@ -1,23 +1,33 @@
 server:
   port: 2333
-  # Only reachable from this same machine (the bot). Never expose this to the internet.
   address: 127.0.0.1
 
 lavalink:
+  plugins:
+    - dependency: "dev.lavalink.youtube:youtube-plugin:1.18.2"
+      snapshot: false
   server:
-    # Must match LAVALINK_PASSWORD in your .env (default below is fine while the
-    # server only listens on 127.0.0.1).
     password: "${LAVALINK_PASSWORD:youshallnotpass}"
     sources:
-      # YouTube streaming is against YouTube's terms, so it stays off.
       youtube: false
       bandcamp: false
       soundcloud: false
       twitch: false
       vimeo: false
-      # Plain HTTP/HTTPS streams: internet radio and direct audio links.
       http: true
       local: false
+
+plugins:
+  youtube:
+    enabled: true
+    allowSearch: true
+    clients:
+      - ANDROID_MUSIC
+      - MWEB
+      - IOS
+      - WEB
+      - WEBEMBEDDED
+      - ANDROID_VR
 
 logging:
   level:

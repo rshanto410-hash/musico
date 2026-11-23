@@ -44,3 +44,10 @@ npm start          # start the bot
 ## Health check
 
 `GET /health` returns `{"status":"ok"}` once the bot is connected.
+
+
+## MUSICO update
+
+- `/play` now requires an exact normalized song-title match (or exact title + artist).
+- Similar titles are shown as suggestions and are never auto-played.
+- If an exact result cannot be opened, playback stops instead of falling back to an unrelated song.

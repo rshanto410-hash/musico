@@ -8,9 +8,20 @@ const { preparePlayback } = require('../../music/guards');
 const { searchJamendo } = require('../../music/jamendo');
 const { searchAudius } = require('../../music/audius');
 const { isSafeStreamUrl } = require('../../music/radio');
+const { rank, makeSelection } = require('../../music/searchSelection');
 
 function isUrl(text) {
   return /^https?:\/\//i.test(text);
+}
+
+function normalize(text) {
+  return String(text || '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
 }
 
 function itemFromUrl(text) {
@@ -31,12 +42,12 @@ module.exports = {
   aliases: ['p'],
   data: new SlashCommandBuilder()
     .setName('play')
-    .setDescription('Play a song by name (free music from Audius) or from a direct audio link.')
+    .setDescription('Play an exact song match or a direct public audio link.')
     .setDMPermission(false)
     .addStringOption((option) =>
       option
         .setName('song')
-        .setDescription('Song name, artist, or a direct http(s) audio link')
+        .setDescription('Exact song title (optionally include artist), or a direct audio link')
         .setRequired(true)
         .setMaxLength(200)
     ),
@@ -49,61 +60,75 @@ module.exports = {
 
     const input = interaction.options.getString('song', true).trim();
     const manager = client.music;
+    let candidates = [];
 
-    // 1. Work out which songs to try.
-    let candidates;
     if (isUrl(input)) {
       if (!isSafeStreamUrl(input)) {
         return interaction.editReply({ embeds: [embeds.error('That link is not allowed. Use a public http(s) audio link.')] });
       }
       candidates = [itemFromUrl(input)];
     } else {
-      candidates = [];
-      let audiusFailed = false;
-      try {
-        candidates = await searchAudius(input);
-      } catch (err) {
-        audiusFailed = true;
-        logger.error('Audius search failed:', err);
+      const searches = [searchAudius(input)];
+
+      // Search YouTube through the Lavalink YouTube plugin.
+      const node = manager.shoukaku.getIdealNode();
+      if (node) {
+        searches.push((async () => {
+          const response = await node.rest.resolve(`ytsearch:${input}`);
+          if (response?.loadType !== 'search' || !Array.isArray(response.data)) return [];
+
+          return response.data.map((track) => ({
+            title: track.info.title,
+            author: track.info.author,
+            url: track.info.uri || '',
+            encoded: track.encoded,
+            durationMs: track.info.length || 0,
+            isLive: Boolean(track.info.isStream),
+            sourceLabel: 'YouTube',
+            link: track.info.uri || null,
+          }));
+        })());
       }
-      // Jamendo is optional. If its key is missing or rejected we just skip it.
-      if (candidates.length === 0 && config.jamendoClientId) {
-        try {
-          candidates = await searchJamendo(input, config.jamendoClientId);
-          audiusFailed = false;
-        } catch (err) {
-          logger.warn(`Jamendo search skipped: ${err.message}`);
+
+      if (config.jamendoClientId) searches.push(searchJamendo(input, config.jamendoClientId));
+
+      const results = await Promise.allSettled(searches);
+      let searchWorked = false;
+      for (const result of results) {
+        if (result.status === 'fulfilled') {
+          searchWorked = true;
+          candidates.push(...result.value);
+        } else {
+          logger.warn(`A music search provider failed: ${result.reason?.message || result.reason}`);
         }
       }
-      if (candidates.length === 0 && audiusFailed) {
-        return interaction.editReply({ embeds: [embeds.error('The music search is not reachable right now. Please try again.')] });
+
+      // Remove duplicate tracks, then require an exact title (or exact title + artist).
+      const seen = new Set();
+      candidates = candidates.filter((item) => {
+        const key = `${normalize(item.title)}|${normalize(item.author)}|${item.sourceLabel}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
+      if (!searchWorked) {
+        return interaction.editReply({ embeds: [embeds.error('Music search is unavailable right now. Please try again later.')] });
       }
-      // Accuracy first: only play a song whose name matches what was typed.
-      const exact = candidates.filter((c) => c.match === undefined || c.match >= 3);
-      if (exact.length === 0 && candidates.length > 0) {
-        const closest = candidates
-          .slice(0, 3)
-          .map((c) => `• ${c.title} — ${c.author}`)
-          .join('\n');
-        return interaction.editReply({
-          embeds: [
-            embeds.error(
-              `I could not find a song named exactly **${input.slice(0, 60)}** in the free music library, so I did not play anything else.\n\nClosest matches:\n${closest}\n\nTo play one of these, type its full name (and artist). Or use a direct audio link.`
-            ),
-          ],
-        });
-      }
-      candidates = exact;
+      candidates = candidates
+        .map((item, index) => ({ item, index, score: Number.isFinite(item.match) ? item.match * 10 : rank(item, input) }))
+        .sort((a, b) => b.score - a.score || a.index - b.index)
+        .map(({ item }) => item)
+        .slice(0, 10);
       if (candidates.length === 0) {
-        return interaction.editReply({
-          embeds: [embeds.error(`No free songs found for **${input.slice(0, 60)}**. Try another name or a simpler search.`)],
-        });
+        return interaction.editReply({ embeds: [embeds.error(`No results found for **${input.slice(0, 60)}**. Nothing was played.`)] });
       }
+      // Never auto-play the first search result. Let the user confirm the exact recording.
+      return interaction.editReply(makeSelection(interaction, input, candidates));
     }
 
-    // 2. Pick the first one Lavalink can actually open.
     let chosen = null;
-    for (const candidate of candidates.slice(0, 3)) {
+    for (const candidate of candidates.slice(0, 10)) {
       try {
         candidate.requestedBy = interaction.member?.displayName || interaction.user.username;
         await manager.resolveItem(candidate);
@@ -113,20 +138,20 @@ module.exports = {
         logger.warn(`Could not open "${candidate.title}": ${err.message}`);
       }
     }
+
     if (!chosen) {
-      return interaction.editReply({ embeds: [embeds.error('I found songs but could not open any of them. Please try again.')] });
+      return interaction.editReply({ embeds: [embeds.error('I found the exact song, but its audio stream could not be opened. Nothing else was played.')] });
     }
 
-    // 3. Queue it.
     try {
       const { startedNow, position } = await manager.enqueue(
         { guild: interaction.guild, voiceChannel, textChannel: interaction.channel },
         [chosen]
       );
-      const text = startedNow
+      const message = startedNow
         ? `▶️ Starting **${chosen.title}** by ${chosen.author}.`
         : `➕ Added **${chosen.title}** to the queue (position ${position}).`;
-      return interaction.editReply({ embeds: [embeds.info('MUSICO', text)] });
+      return interaction.editReply({ embeds: [embeds.info('MUSICO', message)] });
     } catch (err) {
       logger.error('Could not start playback:', err);
       return interaction.editReply({ embeds: [embeds.error('I could not start playing. Check that I can join the voice channel.')] });
