@@ -20,7 +20,7 @@ function checkVoice(interaction, client) {
   const player = client.shoukaku?.players.get(interaction.guildId);
   const queue = manager?.getQueue(interaction.guildId);
   if (!player || !queue) return { error: 'Nothing is playing right now.' };
-  if (player.connection?.channelId !== voice.id) {
+  if (manager.botChannelId(interaction.guildId) !== voice.id) {
     return { error: 'You need to be in my voice channel to do that.' };
   }
   return { manager, queue, player, voice };

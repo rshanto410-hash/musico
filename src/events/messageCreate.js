@@ -42,7 +42,7 @@ async function handleLeave(message, client) {
   const voice = message.member?.voice?.channel;
 
   if (!player) return say(message, embeds.error('I am not in a voice channel.'));
-  if (!voice || player.connection?.channelId !== voice.id) {
+  if (!voice || client.music.botChannelId(message.guild.id) !== voice.id) {
     return say(message, embeds.error('You need to be in my voice channel to send me away.'));
   }
 

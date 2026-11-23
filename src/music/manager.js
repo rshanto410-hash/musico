@@ -25,6 +25,12 @@ class MusicManager {
     return this.queues.get(guildId) || null;
   }
 
+  /** The voice channel the bot is really in (asks Discord, which is always right). */
+  botChannelId(guildId) {
+    const fromDiscord = this.client.guilds?.cache?.get(guildId)?.members?.me?.voice?.channelId;
+    return fromDiscord || this.shoukaku.connections?.get(guildId)?.channelId || this.getPlayer(guildId)?.connection?.channelId || null;
+  }
+
   getPlayer(guildId) {
     return this.shoukaku.players.get(guildId) || null;
   }
@@ -53,7 +59,7 @@ class MusicManager {
 
   async _ensurePlayer(guild, voiceChannel) {
     let player = this.getPlayer(guild.id);
-    if (player && player.connection?.channelId === voiceChannel.id) return player;
+    if (player && this.botChannelId(guild.id) === voiceChannel.id) return player;
     if (player) await this.shoukaku.leaveVoiceChannel(guild.id);
 
     player = await this.shoukaku.joinVoiceChannel({
