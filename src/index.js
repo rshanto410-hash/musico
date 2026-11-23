@@ -11,7 +11,9 @@ const { MusicManager } = require('./music/manager');
 const panel = require('./music/panel');
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
+  // GuildMessages lets the bot see messages that mention it ("@MUSICO j").
+  // Reading the text of those messages needs no privileged intent.
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates, GatewayIntentBits.GuildMessages],
 });
 
 // Audio connection (Lavalink). Commands reach it through client.shoukaku.
