@@ -1,27 +1,15 @@
 'use strict';
 
 const { SlashCommandBuilder, MessageFlags } = require('discord.js');
-const config = require('../../config');
 const embeds = require('../../utils/embeds');
 const logger = require('../../utils/logger');
 const { preparePlayback } = require('../../music/guards');
-const { searchJamendo } = require('../../music/jamendo');
 const { searchAudius } = require('../../music/audius');
 const { isSafeStreamUrl } = require('../../music/radio');
-const { rank, makeSelection } = require('../../music/searchSelection');
+const { rank, makeSelection, normalize } = require('../../music/searchSelection');
 
 function isUrl(text) {
   return /^https?:\/\//i.test(text);
-}
-
-function normalize(text) {
-  return String(text || '')
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLocaleLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, ' ')
-    .trim()
-    .replace(/\s+/g, ' ');
 }
 
 function itemFromUrl(text) {
@@ -47,7 +35,7 @@ module.exports = {
     .addStringOption((option) =>
       option
         .setName('song')
-        .setDescription('Exact song title (optionally include artist), or a direct audio link')
+        .setDescription('Song title (e.g. Perfect), optionally include artist, or direct audio link')
         .setRequired(true)
         .setMaxLength(200)
     ),
@@ -68,42 +56,65 @@ module.exports = {
       }
       candidates = [itemFromUrl(input)];
     } else {
-      const searches = [searchAudius(input)];
-
-      // Search YouTube through the Lavalink YouTube plugin.
+      // 1. YouTube is the primary search source via Lavalink YouTube plugin
       const node = manager.shoukaku.getIdealNode();
+      let youtubeSearchWorked = false;
+
       if (node) {
-        searches.push((async () => {
-          const response = await node.rest.resolve(`ytsearch:${input}`);
-          if (response?.loadType !== 'search' || !Array.isArray(response.data)) return [];
+        // Query YouTube Music first for official studio tracks, then YouTube
+        try {
+          const ytmResponse = await node.rest.resolve(`ytmsearch:${input}`);
+          if (ytmResponse?.loadType === 'search' && Array.isArray(ytmResponse.data) && ytmResponse.data.length > 0) {
+            youtubeSearchWorked = true;
+            candidates.push(
+              ...ytmResponse.data.map((track) => ({
+                title: track.info.title,
+                author: track.info.author,
+                url: track.info.uri || '',
+                encoded: track.encoded,
+                durationMs: track.info.length || 0,
+                isLive: Boolean(track.info.isStream),
+                sourceLabel: 'YouTube',
+                link: track.info.uri || null,
+              }))
+            );
+          }
+        } catch (err) {
+          logger.warn(`YouTube Music search via Lavalink failed: ${err.message}`);
+        }
 
-          return response.data.map((track) => ({
-            title: track.info.title,
-            author: track.info.author,
-            url: track.info.uri || '',
-            encoded: track.encoded,
-            durationMs: track.info.length || 0,
-            isLive: Boolean(track.info.isStream),
-            sourceLabel: 'YouTube',
-            link: track.info.uri || null,
-          }));
-        })());
-      }
-
-      if (config.jamendoClientId) searches.push(searchJamendo(input, config.jamendoClientId));
-
-      const results = await Promise.allSettled(searches);
-      let searchWorked = false;
-      for (const result of results) {
-        if (result.status === 'fulfilled') {
-          searchWorked = true;
-          candidates.push(...result.value);
-        } else {
-          logger.warn(`A music search provider failed: ${result.reason?.message || result.reason}`);
+        try {
+          const ytResponse = await node.rest.resolve(`ytsearch:${input}`);
+          if (ytResponse?.loadType === 'search' && Array.isArray(ytResponse.data) && ytResponse.data.length > 0) {
+            youtubeSearchWorked = true;
+            candidates.push(
+              ...ytResponse.data.map((track) => ({
+                title: track.info.title,
+                author: track.info.author,
+                url: track.info.uri || '',
+                encoded: track.encoded,
+                durationMs: track.info.length || 0,
+                isLive: Boolean(track.info.isStream),
+                sourceLabel: 'YouTube',
+                link: track.info.uri || null,
+              }))
+            );
+          }
+        } catch (err) {
+          logger.warn(`YouTube search via Lavalink failed: ${err.message}`);
         }
       }
 
-      // Remove duplicate tracks, then require an exact title (or exact title + artist).
+      // 2. Only if YouTube search yielded no results, fall back to Audius
+      if (candidates.length === 0 && !youtubeSearchWorked) {
+        try {
+          candidates = await searchAudius(input);
+        } catch (err) {
+          logger.warn(`Audius fallback search failed: ${err.message}`);
+        }
+      }
+
+      // Deduplicate items
       const seen = new Set();
       candidates = candidates.filter((item) => {
         const key = `${normalize(item.title)}|${normalize(item.author)}|${item.sourceLabel}`;
@@ -112,23 +123,30 @@ module.exports = {
         return true;
       });
 
-      if (!searchWorked) {
-        return interaction.editReply({ embeds: [embeds.error('Music search is unavailable right now. Please try again later.')] });
-      }
-      candidates = candidates
-        .map((item, index) => ({ item, index, score: Number.isFinite(item.match) ? item.match * 10 : rank(item, input) }))
+      // Rank items accurately with smart song-title parser
+      const scoredCandidates = candidates
+        .map((item, index) => ({ item, index, score: rank(item, input) }))
+        .filter(({ score }) => score > 0) // Filter out negative/unrelated scores
         .sort((a, b) => b.score - a.score || a.index - b.index)
         .map(({ item }) => item)
         .slice(0, 10);
-      if (candidates.length === 0) {
-        return interaction.editReply({ embeds: [embeds.error(`No results found for **${input.slice(0, 60)}**. Nothing was played.`)] });
+
+      // If all candidates had negative scores, fall back to top candidates or show not found
+      const finalCandidates = scoredCandidates.length > 0 ? scoredCandidates : candidates.slice(0, 5);
+
+      if (finalCandidates.length === 0) {
+        return interaction.editReply({
+          embeds: [embeds.error(`No accurate results found for **${input.slice(0, 60)}**. Nothing was played.`)],
+        });
       }
-      // Never auto-play the first search result. Let the user confirm the exact recording.
-      return interaction.editReply(makeSelection(interaction, input, candidates));
+
+      // Never auto-play. Present selection menu for user confirmation.
+      return interaction.editReply(makeSelection(interaction, input, finalCandidates));
     }
 
+    // Direct link path:
     let chosen = null;
-    for (const candidate of candidates.slice(0, 10)) {
+    for (const candidate of candidates.slice(0, 5)) {
       try {
         candidate.requestedBy = interaction.member?.displayName || interaction.user.username;
         await manager.resolveItem(candidate);
@@ -140,7 +158,7 @@ module.exports = {
     }
 
     if (!chosen) {
-      return interaction.editReply({ embeds: [embeds.error('I found the exact song, but its audio stream could not be opened. Nothing else was played.')] });
+      return interaction.editReply({ embeds: [embeds.error('Could not open the audio stream for that link. Nothing was played.')] });
     }
 
     try {

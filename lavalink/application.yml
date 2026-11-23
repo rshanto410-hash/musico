@@ -4,8 +4,9 @@ server:
 
 lavalink:
   plugins:
-    - dependency: "dev.lavalink.youtube:youtube-plugin:1.18.2"
-      snapshot: false
+    - dependency: "dev.lavalink.youtube:youtube-plugin:e41dd95f8bd134b51e75080fb28cc805fecb431a"
+      repository: "https://maven.lavalink.dev/snapshots"
+      snapshot: true
   server:
     password: "${LAVALINK_PASSWORD:youshallnotpass}"
     sources:
@@ -21,15 +22,26 @@ plugins:
   youtube:
     enabled: true
     allowSearch: true
+    allowDirectVideoIds: true
+    allowDirectPlaylistIds: true
     clients:
-      - ANDROID_MUSIC
-      - MWEB
+      - MUSIC
       - IOS
-      - WEB
-      - WEBEMBEDDED
+      - TV
+      - ANDROID
+      - MWEB
+      - ANDROID_MUSIC
+      - TVHTML5_SIMPLY
       - ANDROID_VR
+      - WEBEMBEDDED
+      - WEB
+    oauth:
+      enabled: true
+      refreshToken: "${YOUTUBE_OAUTH_REFRESH_TOKEN:1//0gS34IKvzloo1CgYIARAAGBASSQF-L9IrntdqYcCTmoaND_QVPOqcJMeafglRpSdFsCOhwbRXN_TcKK5fD6iEPM7T9OjJ9WIGAS7AA3erkTR0H0Zm4AKdnHDc5PI}"
+      skipInitialization: true
 
 logging:
   level:
     root: INFO
-    lavalink: INFO
+    lavalink: DEBUG
+    moe.kyokobot.koe: DEBUG

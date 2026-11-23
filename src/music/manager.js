@@ -2,6 +2,7 @@
 
 const { GuildQueue } = require('./queue');
 const logger = require('../utils/logger');
+const embeds = require('../utils/embeds');
 
 const IDLE_LEAVE_MS = 2 * 60 * 1000;
 const MAX_ATTEMPTS = 5;
@@ -60,26 +61,47 @@ class MusicManager {
   async _ensurePlayer(guild, voiceChannel) {
     let player = this.getPlayer(guild.id);
     if (player && this.botChannelId(guild.id) === voiceChannel.id) return player;
-    if (player) await this.shoukaku.leaveVoiceChannel(guild.id);
+    if (player || this.shoukaku.connections?.has(guild.id)) {
+      await this.shoukaku.leaveVoiceChannel(guild.id);
+    }
 
     player = await this.shoukaku.joinVoiceChannel({
       guildId: guild.id,
       channelId: voiceChannel.id,
       shardId: guild.shardId ?? 0,
-      deaf: true,
+      deaf: false,
     });
-    player.on('start', () => logger.info('Track started in Lavalink.'));
+
+    // Give Lavalink a moment to establish the voice connection before sending audio
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    player.on('start', () => logger.info(`Track started in Lavalink for guild ${guild.id}.`));
     player.on('end', (data) => {
-      logger.info(`Track ended in Lavalink (reason: ${data?.reason}).`);
+      logger.info(`Track ended in Lavalink for guild ${guild.id} (reason: ${data?.reason}).`);
       this._onTrackEnd(guild.id, data);
     });
-    player.on('exception', (err) => logger.error(`Player exception: ${JSON.stringify(err?.exception ?? err)}`));
+    player.on('exception', (err) => {
+      const rawMsg = err?.exception?.message || JSON.stringify(err?.exception ?? err);
+      logger.error(`Player exception in guild ${guild.id}: ${rawMsg}`);
+      const queue = this.getQueue(guild.id);
+      if (queue?.textChannel && queue.current) {
+        let userMsg = rawMsg;
+        if (rawMsg.includes('requires login')) {
+          userMsg = 'YouTube requires account authorization. Please authorize the device code shown in your Lavalink console at https://www.google.com/device.';
+        } else if (rawMsg.includes('All clients failed')) {
+          userMsg = 'All playback streams failed to load for this track. Please ensure Lavalink has restarted with the updated plugin.';
+        }
+        queue.textChannel.send({
+          embeds: [embeds.error(`Playback error on **${queue.current.title}**: ${userMsg}`)],
+        }).catch(() => {});
+      }
+    });
     player.on('stuck', () => {
-      logger.warn('Player got stuck, skipping.');
+      logger.warn(`Player got stuck in guild ${guild.id}, skipping.`);
       const queue = this.getQueue(guild.id);
       if (queue?.isActive) this._advance(queue, true).catch((e) => logger.error('Skip after stuck failed:', e));
     });
-    player.on('closed', (data) => logger.warn(`Voice connection closed (code ${data?.code}).`));
+    player.on('closed', (data) => logger.warn(`Voice connection closed for guild ${guild.id} (code ${data?.code}).`));
     return player;
   }
 
@@ -102,6 +124,7 @@ class MusicManager {
     await this._ensurePlayer(guild, voiceChannel);
 
     const startedNow = !queue.isActive;
+    if (startedNow) queue.paused = false;
     for (const item of items) queue.add(item);
     const position = queue.upcoming.length;
     if (startedNow) await this._advance(queue, true);
@@ -120,12 +143,12 @@ class MusicManager {
     const player = this.getPlayer(queue.guildId);
     if (!player) throw new Error('Not connected to a voice channel.');
     await this.resolveItem(item);
-    if (queue.paused) {
-      await player.setPaused(false);
-      queue.paused = false;
-    }
+
+    // Explicitly unpause in queue state and send paused: false to Lavalink REST API
+    queue.paused = false;
     logger.info(`Playing "${item.title}" from ${item.sourceLabel || 'unknown source'}.`);
-    await player.playTrack({ track: { encoded: item.encoded } });
+    await player.playTrack({ track: { encoded: item.encoded }, paused: false });
+    await player.setGlobalVolume(100);
   }
 
   /** Move to the next song, skipping any that fail to load. */
@@ -148,6 +171,7 @@ class MusicManager {
 
   async _onQueueEnd(queue) {
     queue.current = null;
+    queue.paused = false;
     const player = this.getPlayer(queue.guildId);
     if (player) {
       try {
@@ -165,6 +189,16 @@ class MusicManager {
     if (reason !== 'finished' && reason !== 'loadFailed') return;
     const queue = this.getQueue(guildId);
     if (!queue?.isActive) return;
+
+    if (reason === 'loadFailed') {
+      logger.warn(`Track load failed in Lavalink for guild ${guildId}, advancing queue.`);
+      if (queue.textChannel && queue.current) {
+        queue.textChannel.send({
+          embeds: [embeds.error(`Could not load audio for **${queue.current.title}**. Skipping to next track.`)],
+        }).catch(() => {});
+      }
+    }
+
     this._advance(queue, false).catch((err) => logger.error('Could not advance queue:', err));
   }
 

@@ -33,9 +33,6 @@ function buildEmbed(queue) {
     { name: 'Loop', value: queue.loop === 'off' ? 'Off' : queue.loop === 'track' ? 'Song' : 'Queue', inline: true },
     { name: 'Up next', value: queue.upcoming[0] ? queue.upcoming[0].title.slice(0, 100) : '—', inline: true }
   );
-  if (item.sourceLabel === 'Jamendo' && item.link) {
-    embed.addFields({ name: 'Credit', value: `Music by ${item.author} • [Jamendo](${item.link})` });
-  }
   if (item.requestedBy) embed.addFields({ name: 'Requested by', value: item.requestedBy, inline: true });
   return embed;
 }
@@ -47,7 +44,8 @@ function buildPanel(queue) {
     new ButtonBuilder()
       .setCustomId('musico:toggle')
       .setEmoji(queue.paused ? '▶️' : '⏸️')
-      .setStyle(ButtonStyle.Primary),
+      .setLabel(queue.paused ? 'Resume' : 'Pause')
+      .setStyle(queue.paused ? ButtonStyle.Success : ButtonStyle.Primary),
     new ButtonBuilder().setCustomId('musico:skip').setEmoji('⏭️').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('musico:stop').setEmoji('⏹️').setStyle(ButtonStyle.Danger),
     new ButtonBuilder()
