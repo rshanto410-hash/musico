@@ -62,8 +62,12 @@ class MusicManager {
       shardId: guild.shardId ?? 0,
       deaf: true,
     });
-    player.on('end', (data) => this._onTrackEnd(guild.id, data));
-    player.on('exception', (err) => logger.error('Player exception:', err));
+    player.on('start', () => logger.info('Track started in Lavalink.'));
+    player.on('end', (data) => {
+      logger.info(`Track ended in Lavalink (reason: ${data?.reason}).`);
+      this._onTrackEnd(guild.id, data);
+    });
+    player.on('exception', (err) => logger.error(`Player exception: ${JSON.stringify(err?.exception ?? err)}`));
     player.on('stuck', () => {
       logger.warn('Player got stuck, skipping.');
       const queue = this.getQueue(guild.id);
@@ -114,6 +118,7 @@ class MusicManager {
       await player.setPaused(false);
       queue.paused = false;
     }
+    logger.info(`Playing "${item.title}" from ${item.sourceLabel || 'unknown source'}.`);
     await player.playTrack({ track: { encoded: item.encoded } });
   }
 
