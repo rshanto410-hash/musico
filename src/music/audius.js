@@ -9,6 +9,10 @@ const API_HOST = 'https://api.audius.co';
 const APP_NAME = 'MUSICO';
 const USER_AGENT = 'MUSICO-DiscordBot/0.1';
 
+function normalize(text) {
+  return String(text || '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
 /**
  * @returns {Promise<Array<{title:string,author:string,url:string,durationMs:number,isLive:boolean,sourceLabel:string,link:string}>>}
  */
@@ -27,9 +31,23 @@ async function searchAudius(query, fetchImpl = fetch, limit = 5) {
   const body = await res.json();
   const data = Array.isArray(body?.data) ? body.data : [];
 
+  const q = normalize(query);
+  const score = (t) => {
+    const title = normalize(t.title);
+    const artist = normalize(t.user?.name);
+    if (title === q) return 4; // exact song name
+    if (title.startsWith(q)) return 3;
+    if (title.includes(q)) return 2;
+    if ((title + ' ' + artist).includes(q)) return 1;
+    return 0;
+  };
+
   return data
     .filter((t) => t && t.id && t.is_streamable !== false)
+    .map((t, index) => ({ t, index, s: score(t) }))
+    .sort((a, b) => b.s - a.s || a.index - b.index) // best name match first, Audius order breaks ties
     .slice(0, limit)
+    .map(({ t }) => t)
     .map((t) => ({
       title: String(t.title || 'Unknown title').slice(0, 100),
       author: String(t.user?.name || 'Unknown artist').slice(0, 80),
